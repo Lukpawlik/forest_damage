@@ -1,0 +1,174 @@
+---
+author: "Łukasz Pawlik"
+date: "11-10-2021 r."
+output:
+  pdf_document: default
+  html_document: default
+---
+Modelowanie i prognozowanie geozagrożeń
+Edycja 2021/2022
+
+Temat: wprowadzenie do R i RStudio
+
+Praca z danymi, import, formatowanie, tworzenie zmiennych, zapisywanie
+
+Import danych przy użyciu adresu URL (Uniform Resource Locator - ujednolicony format adresowania), przy okazji tworzymy również nowy obiekt
+
+
+1. Wstęp
+
+```{r}
+
+tabela1 <- read.csv("https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_meteorologiczne/wykaz_stacji.csv")
+```
+Jak wygladaja te dane?
+```{r}
+head(tabela1)
+str(tabela1)
+```
+Inna opcja to fizyczne sciągnięcie pliku na własny komputer i wczytanie go z dysku twardego.
+Jedną z funkcji przydatnych dla operacji otwierania stron WWW jest funkcja *shell.exec()*.
+Poniżej ściągamy dane dobowe dla opadów, rozpakowujemy je w sposób manualny lub bezpośrednio w R.
+
+```{r}
+shell.exec("https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_meteorologiczne/dobowe/opad/")
+
+unzip('H://US_2021_2022/1997_o.zip')#rozpakowujemy
+
+#tworzymy zmienną tabela2, która jest zapisywana w pamięci roboczej
+tabela2 <- read.csv("H://US_2021_2022/o_d_1997.csv",
+                    header = FALSE)
+```
+
+Inny sposób to bezpośrednie ściągnięcie danego pliku z sieci WWW i jego rozpakowanie i zaimportowanie do RStudio.
+```{r}
+download.file('https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_meteorologiczne/dobowe/opad/1996_2000/1998_o.zip',
+              destfile = 'H://US_2021_2022/1998_o.zip')
+#argument destfile (destination file) to ścieżka dostępu i nazwa pliku, a nie sama ścieżka dostępu do katalogu roboczego
+unzip('H://US_2021_2022/1998_o.zip')
+tabela3 <- read.csv("H://US_2021_2022/o_d_1998.csv",
+                    header = FALSE)
+
+head(tabela3)#domyśle sprawdzamy 6 pierwszych wierszy
+tail(tabela3)#6 ostatnich wierszy
+names(tabela3)#nazwy kolumn
+
+```
+Należy zauważyć, że kolumny nie maja nazw i trzeba to zmodyfikować. Do tej operacji można zastosować tzw. przetwarzanie potokowe przy użyciu łącznika **%>%**
+Opis zawartości plików znajduje się w osobnym pliku TXT
+```{r}
+shell.exec('https://danepubliczne.imgw.pl/data/dane_pomiarowo_obserwacyjne/dane_meteorologiczne/dobowe/opad/o_d_format.txt')
+
+library(dplyr)
+#install.packages('dplyr')
+tabela3 <- tabela2 %>%
+  rename(kod = V1, nazwa = V2, rok = V3, mies = V4,
+         dzien = V5, opad = V6)
+
+head(tabela3)
+#poniże sposób na stworzenie tabeli
+```
+Stara nazwa | Nowa nazwa
+------------|--------------
+V1          | kod stacji
+V2          | nazwa stacji
+V3          | rok
+V4          | miesiąc
+V5          | dzień
+V6          | wartość opadu
+
+Następnie wybieramy tylko zmienne potrzebne do analizy.
+```{r}
+tabela4 <- tabela3 %>%
+  select(nazwa, rok, mies, dzien, opad)
+```
+
+Istnieje kilka sposobów selekcji kolumn. Inny to:
+```{r}
+tabela4a <- tabela3[,2:6]
+names(tabela4a)
+```
+w tabeli mamy informacje o czasie, ale dane te nie są jeszcze w formacie daty i trzeba to zmodyfikować. Najpierw informacja ta jest sklejana w jeden łańcuch znaków. W kolejnym kroku informacja ta jest formatowana na datę.
+
+```{r}
+nasza_data <- paste(tabela4a$rok, tabela4a$mies, tabela4a$dzien,
+                    sep = "-")
+nasza_data[1:8]
+
+nasza_data1 <- as.Date(nasza_data, "%Y-%m-%d")
+nasza_data1[1:5]
+```
+To samo można zrobić w ten sposób.
+```{r}
+nasza_data1 <- as.Date(paste(tabela4a$rok, tabela4a$mies, tabela4a$dzien,
+                     sep = "-"), "%Y-%m-%d")
+nasza_data1[1:10]
+```
+Te dane dodajemy do tabeli *tabela4a*
+
+```{r}
+tabela4b <- data.frame(data = nasza_data1, tabela4a)
+head(tabela4b)
+str(tabela4b)#czy zgadza się format danych?
+```
+Ponawiamy selekcję ponieważ nie potrzebujemy kolumn 2-4.
+```{r}
+tabela5 <- tabela4b %>%
+  select(nazwa, data, opad)
+
+head(tabela5)
+str(tabela5)#ile mamy tu obserwacji?
+```
+W tabeli mamy dane dla wszystkich stacji opadowych. Ile ich jest?
+```{r}
+lista <- tabela5 %>% group_by(nazwa) %>%
+  summarize(count=n())
+print(lista, n=40)
+
+str(lista)
+```
+
+Czy jest jakas stacja z pełnym pomiarem przez 365 dni.
+Aby to sprawdzić filtrujemy dane.
+```{r}
+stacje_kompletne <- lista %>%
+  filter(count == 365)
+stacje_kompletne
+```
+
+Wybieramy stacje Stanisławów i sprawdzamy dane. Następnie przeliczamy średni opad dobowy. Zobaczmy jak te dane wyglądają na wykresie.
+
+```{r}
+stanislawow <- tabela5 %>%
+  filter(nazwa == "STANISŁAWÓW")
+str(stanislawow)#365 obserwacji (wierszy)
+mean(stanislawow$opad) #4,3 mm
+plot(stanislawow$opad)
+#do szeregow czasowych lepszy bedzie wykres liniowy
+plot(stanislawow$opad, type = "l")
+names(stanislawow)
+```
+Aby tworzyc lepszej jakosci wykresy przechodzimy do pakietu *ggplot2()*.
+
+```{r}
+library(ggplot2)
+#byc moze trzeba ten pakiet doinstalowac, wtedy:
+#install.packages('ggplot2')
+
+ggplot()+
+  geom_line(data = stanislawow, mapping = aes(x = data, y = opad))
+
+#możemy zmienić atrybuty wykresu
+ggplot()+
+  geom_line(data = stanislawow, mapping = aes(x = data, y = opad),
+            color='blue')+
+  ggtitle("Dobowa suma opadów w 1997 roku na stacji Stanisławów")
+
+#znamy średni opad, dodajmy tę wartość do wykresu
+ggplot()+
+  geom_line(data = stanislawow, mapping = aes(x = data, y = opad),
+            color='blue')+
+  ggtitle("Dobowa suma opadów w 1997 roku na stacji Stanisławów")+
+  geom_hline(yintercept = 4.3, linetype = 'dashed', color = 'red')
+```
+
